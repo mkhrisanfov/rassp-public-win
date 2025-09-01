@@ -1,12 +1,80 @@
-import click
-import itertools
-import json
-import numpy as np
+"""
+The script is designed to be run from command line with a YAML configuration file
+that specifies all training parameters, data sources, model architecture, and training settings.
+
+## Main Components
+
+### 1. **Training Function (`train`)**
+This is the core function that:
+- Sets up experiment configuration and naming
+- Loads datasets from database or parquet files
+- Creates data loaders for training and testing
+- Initializes the neural network model
+- Sets up loss function, optimizer, and training parameters
+- Handles checkpoint loading and saving
+- Runs the actual training loop
+
+### 2. **Data Loading and Processing**
+- Supports multiple data formats (.db, .parquet)
+- Uses `dataset.make_db_dataset` or `dataset.load_pq_dataset`
+- Applies featurization and prediction configurations
+- Creates train/test data samplers
+
+### 3. **Model Configuration**
+- Loads network parameters from config
+- Creates neural network using `eval(net_name)(**net_params)`
+- Handles multi-GPU training with DataParallel
+- Sets up gradient freezing for fine-tuning
+
+### 4. **Training Loop**
+- Uses `netutil.generic_runner` for the actual training
+- Handles validation, checkpointing, and logging
+- Supports profiling and mixed precision training
+
+### 5. **Command Line Interface**
+- Uses `click` for command line arguments
+- Accepts experiment config file and optional extra name
+- Supports profiling and timestamp skipping options
+
+## Key Features
+- **Checkpoint Management**: Automatically loads recent checkpoints if available
+- **Flexible Data Handling**: Supports multiple data source types
+- **Multi-GPU Support**: Uses DataParallel for distributed training
+- **Validation Options**: Multiple validation functions (shift uncertainty, KL divergence, etc.)
+- **TensorBoard Logging**: Tracks training metrics
+- **Configurable Training**: Highly customizable through YAML configuration files
+"""
+
+# import itertools
+# import json
 import os
-import pandas as pd
-import pickle
 import pickle
 import re
+
+# import sys
+import time
+from glob import glob
+
+import click
+import numpy as np
+
+# import pandas as pd
+import torch
+import yaml
+from natsort import natsorted
+
+# from rdkit import Chem
+# from rdkit.Chem import AllChem
+# from rdkit.Chem import rdMolDescriptors as rdMD
+from tensorboardX import SummaryWriter
+from torch import nn
+
+# from tqdm import tqdm
+
+from rassp import dataset, netutil, util
+
+from rassp.model import formulaenets, losses, nets, subsetnets
+from rassp.msutil import binutils
 
 try:
     import resource as res
@@ -27,33 +95,10 @@ except ImportError:
 
         @staticmethod
         def getrlimit(resource):
-            return (4096, 4096)
+            return (40960, 40960)
 
 
-import sys
-import time
-import torch
-import yaml
-
-from glob import glob
-from natsort import natsorted
-from rdkit import Chem
-from rdkit.Chem import AllChem
-from rdkit.Chem import rdMolDescriptors as rdMD
-from torch import nn
-from tensorboardX import SummaryWriter
-from tqdm import tqdm
-
-from rassp import dataset
-from rassp import netutil
-from rassp import util
-from rassp.msutil import binutils
-from rassp.model import nets
-from rassp.model import formulaenets
-from rassp.model import subsetnets
-from rassp.model import losses
-
-USE_CUDA = os.environ.get("USE_CUDA", False)
+USE_CUDA = int(os.environ.get("USE_CUDA", 0)) > 0
 DATALOADER_PIN_MEMORY = False
 
 
@@ -162,9 +207,9 @@ def train(
         dataset_config["db_filename"] = os.path.join(
             data_dir, dataset_config["db_filename"]
         )
-        assert os.path.exists(dataset_config["db_filename"]), (
-            f"provided db path {dataset_config['db_filename']}did not exist..."
-        )
+        assert os.path.exists(
+            dataset_config["db_filename"]
+        ), f"provided db path {dataset_config['db_filename']}did not exist..."
 
         basename = os.path.basename(dataset_config["db_filename"])
         ext = basename.split(".")[-1]
@@ -344,7 +389,7 @@ def train(
             step_size=opt_params["scheduler_step_size"],
         )
 
-    checkpoint_filename = CHECKPOINT_BASENAME + ".{epoch_i:08d}"
+    checkpoint_filename = CHECKPOINT_BASENAME  # ".{epoch_i:08d}"
     print("checkpoint:", checkpoint_filename)
 
     checkpoint_every_n_epochs = exp_config.get(
@@ -433,9 +478,9 @@ def train(
 @click.option("--profile", default=False, is_flag=True)
 def run(exp_config_name, exp_extra_name, skip_timestamp=False, profile=False):
     # raise file limits for pytorch processing
-    file_limit_soft, file_limit_hard = res.getrlimit(res.RLIMIT_NOFILE)
-    res.setrlimit(res.RLIMIT_NOFILE, (file_limit_hard, file_limit_hard))
-    print("file limit is", file_limit_hard)
+    # file_limit_soft, file_limit_hard = res.getrlimit(res.RLIMIT_NOFILE)
+    # res.setrlimit(res.RLIMIT_NOFILE, (file_limit_hard, file_limit_hard))
+    # print("file limit is", file_limit_hard)
 
     exp_config = yaml.load(open(exp_config_name, "r"), Loader=yaml.FullLoader)
     exp_name = os.path.basename(exp_config_name.replace(".yaml", ""))
