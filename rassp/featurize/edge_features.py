@@ -11,27 +11,28 @@ from util import get_nos_coords
 from featurize.atom_features import to_onehot
 from featurize.molecule_features import mol_to_nums_adj
 
+
 def feat_edges(mol, MAX_ATOM_N=None, MAX_EDGE_N=None):
     """
     Create features for edges, edge connectivity
     matrix, and edge/vert matrix
 
-    Note: We really really should parameterize this somehow. 
+    Note: We really really should parameterize this somehow.
     """
-    
+
     atom_n = mol.GetNumAtoms()
     atomicno, vert_adj = mol_to_nums_adj(mol)
-    
+
     double_edge_n = np.sum(vert_adj > 0)
     assert double_edge_n % 2 == 0
     edge_n = double_edge_n // 2
-    
+
     edge_adj = np.zeros((edge_n, edge_n))
     edge_vert_adj = np.zeros((edge_n, atom_n))
-    
+
     edge_list = []
     for i in range(atom_n):
-        for j in range(i +1, atom_n):
+        for j in range(i + 1, atom_n):
             if vert_adj[i, j] > 0:
                 edge_list.append((i, j))
                 e_idx = len(edge_list) - 1
@@ -41,21 +42,24 @@ def feat_edges(mol, MAX_ATOM_N=None, MAX_EDGE_N=None):
     # now which edges are connected
     edge_adj = edge_vert_adj @ edge_vert_adj.T - 2 * np.eye(edge_n)
     assert edge_adj.shape == (edge_n, edge_n)
-    
+
     # now create edge features
     edge_features = []
-    
+
     for edge_idx, (i, j) in enumerate(edge_list):
         f = []
         f += to_onehot(vert_adj[i, j], [1.0, 1.5, 2.0, 3.0])
-        
-        edge_features.append(f)              
-        
+
+        edge_features.append(f)
+
     edge_features = np.array(edge_features)
-    
-    return {'edge_edge': np.expand_dims(edge_adj, 0), 
-            'edge_feat': edge_features, 
-            'edge_vert': np.expand_dims(edge_vert_adj, 0)}
+
+    return {
+        "edge_edge": np.expand_dims(edge_adj, 0),
+        "edge_feat": edge_features,
+        "edge_vert": np.expand_dims(edge_vert_adj, 0),
+    }
+
 
 def feat_edges_for_bipartite_model(mol, adj, MAX_ATOM_N=48, MAX_EDGE_N=64):
     """
@@ -102,17 +106,19 @@ def feat_edges_for_bipartite_model(mol, adj, MAX_ATOM_N=48, MAX_EDGE_N=64):
         # check bond order
         assert adj[:, ai, aj].sum() != 0.0
 
-        a_pair = tuple(sorted(
-            (
-                mol.GetAtomWithIdx(ai).GetAtomicNum(),
-                mol.GetAtomWithIdx(aj).GetAtomicNum(),
+        a_pair = tuple(
+            sorted(
+                (
+                    mol.GetAtomWithIdx(ai).GetAtomicNum(),
+                    mol.GetAtomWithIdx(aj).GetAtomicNum(),
+                )
             )
-        ))
+        )
         ind = bond_map[a_pair]
         neighboring_atoms.append(ind)
     neighboring_atoms = F.one_hot(
-        torch.Tensor(neighboring_atoms).to(torch.int64),
-        num_classes=n_total_feats)
+        torch.Tensor(neighboring_atoms).to(torch.int64), num_classes=n_total_feats
+    )
 
     # count-up encoding of atoms on paths walking away from the bond
     # for now, we only have atoms at distance +1 from the bond
@@ -126,39 +132,52 @@ def feat_edges_for_bipartite_model(mol, adj, MAX_ATOM_N=48, MAX_EDGE_N=64):
         ai = bond.GetBeginAtomIdx()
         aj = bond.GetEndAtomIdx()
 
-        neighbor_inds = list(np.where(shortest_paths[ai] == 1)[0]) + list(np.where(shortest_paths[aj] == 1)[0])
-        neighbor_atom_nums = [mol.GetAtomWithIdx(int(i)).GetAtomicNum() for i in neighbor_inds]
+        neighbor_inds = list(np.where(shortest_paths[ai] == 1)[0]) + list(
+            np.where(shortest_paths[aj] == 1)[0]
+        )
+        neighbor_atom_nums = [
+            mol.GetAtomWithIdx(int(i)).GetAtomicNum() for i in neighbor_inds
+        ]
 
         vec = np.zeros(len(ALLOWED_ATOM_NUMS))
         for a_num in neighbor_atom_nums:
             vec[a_map[a_num]] += 1
         neighboring_atoms_1.append(vec)
-        
+
     neighboring_atoms_2 = []
     for bi in range(n_bonds):
         bond = mol.GetBondWithIdx(bi)
         ai = bond.GetBeginAtomIdx()
         aj = bond.GetEndAtomIdx()
 
-        neighbor_inds = list(np.where(shortest_paths[ai] == 2)[0]) + list(np.where(shortest_paths[aj] == 1)[0])
-        neighbor_atom_nums = [mol.GetAtomWithIdx(int(i)).GetAtomicNum() for i in neighbor_inds]
+        neighbor_inds = list(np.where(shortest_paths[ai] == 2)[0]) + list(
+            np.where(shortest_paths[aj] == 1)[0]
+        )
+        neighbor_atom_nums = [
+            mol.GetAtomWithIdx(int(i)).GetAtomicNum() for i in neighbor_inds
+        ]
 
         vec = np.zeros(len(ALLOWED_ATOM_NUMS))
         for a_num in neighbor_atom_nums:
             vec[a_map[a_num]] += 1
         neighboring_atoms_2.append(vec)
-        
+
     atom_count = torch.cat(
         [
             torch.Tensor(neighboring_atoms_1).to(torch.int64),
             torch.Tensor(neighboring_atoms_2).to(torch.int64),
-        ], dim=-1)
+        ],
+        dim=-1,
+    )
 
-    edge_feat_nopad = torch.cat([
-        bond_orders,
-        neighboring_atoms,
-        atom_count,
-    ], dim=-1)
+    edge_feat_nopad = torch.cat(
+        [
+            bond_orders,
+            neighboring_atoms,
+            atom_count,
+        ],
+        dim=-1,
+    )
 
     # pad up to the maximum number of edges
     bipartite_adj = torch.zeros((MAX_ATOM_N, MAX_EDGE_N))
@@ -167,6 +186,6 @@ def feat_edges_for_bipartite_model(mol, adj, MAX_ATOM_N=48, MAX_EDGE_N=64):
     edge_feat[:n_bonds, :] = edge_feat_nopad
 
     return {
-        'bipartite_adj': bipartite_adj,
-        'edge_feat': edge_feat,
+        "bipartite_adj": bipartite_adj,
+        "edge_feat": edge_feat,
     }

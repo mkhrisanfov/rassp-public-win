@@ -20,9 +20,7 @@ for i in range(ITERS):
     r = masseval.py_get_all_frag_spect_highres(f)
     t3 = time.time()
 
-
-    res.append({'orig_runtime' : t2-t1,
-                'highres_runtime' : t3-t2})
+    res.append({"orig_runtime": t2 - t1, "highres_runtime": t3 - t2})
 
 df = pd.DataFrame(res)
 print(df.mean())

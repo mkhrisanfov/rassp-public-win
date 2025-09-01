@@ -3,4 +3,4 @@ import torch
 import torch.utils.data
 from rdkit import Chem
 
-from .featurize import * 
+from .featurize import *
