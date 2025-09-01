@@ -110,7 +110,7 @@ def run_exp(infile, outfiles, ec, exp_name):
     df = df[mask]
     logger.info(f'Filtering for phase reduced from {len(df)} to {sum(mask)}')
     
-    use_cuda = int(os.environ.get("USE_CUDA", "1") ) > 0
+    use_cuda = int(os.environ.get("USE_CUDA", "0"))>0
     pm = netutil.PredModel(meta_filename, checkpoint_filename,
                            USE_CUDA=use_cuda, data_parallel=ec.get('data_parallel', False))
 

@@ -13,7 +13,7 @@ FORWARD_EVAL_EXPERIMENTS = {
     },
     'normalize_pred': True,
     'streaming_save': True,
-    'checkpoint': 'checkpoints/demo.first-test.56717918',  # edit this line to the checkpoint that you generate
+    'checkpoint': 'checkpoints/demo.second-test.56720725',  # edit this line to the checkpoint that you generate
     'batch_size': 6,
     'epoch': 0,
     'mol_id_type': str,  # either str or int, depending on your input dataset's `mol_id` column dtype

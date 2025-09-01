@@ -131,8 +131,8 @@ cpdef get_connected_components_dfs(g):
 cpdef unsigned long bitset_remove_item(unsigned long input_set, int item):
     return input_set & (((1ul << 64) - 1) ^ (1ul << int(item)))
 
-cpdef unsigned long bitset_add_item(unsigned long input_set, int item):
-    cdef unsigned long x = 1
+cpdef unsigned long long bitset_add_item(unsigned long input_set, int item):
+    cdef unsigned long long x = 1
     
     return input_set | (x << int(item))
 
@@ -214,8 +214,8 @@ cpdef array_bitsets_to_array(np.int64_t[:] sets,
     cdef int N = len(sets)
     cdef int i = 0
     
-    cdef unsigned long val = 0
-    cdef unsigned long val_i = 0 
+    cdef unsigned long long val = 0
+    cdef unsigned long long val_i = 0 
     out = np.zeros((N, max_elements), dtype=np.uint8)
     for val_i, val in enumerate(sets):
         mask = 0

@@ -538,7 +538,7 @@ class PredModel(object):
         for batch_i, features_batch_tensor in enumerate(batch_iterator):
 
             if self.USE_CUDA:
-                features_batch_tensor = {k: v.to('cuda') for k, v in features_batch_tensor.items()}
+                features_batch_tensor = {k: v.to("cuda") for k, v in features_batch_tensor.items()}
 
             if not benchmark_dataloader:
                 # actually run the model

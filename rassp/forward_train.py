@@ -7,7 +7,27 @@ import pandas as pd
 import pickle
 import pickle
 import re
-import resource as res
+try:
+    import resource as res
+except ImportError:
+    # Minimal Windows fallback stub
+    class res:
+        RLIMIT_AS = RLIMIT_DATA = RLIMIT_STACK = RLIMIT_CPU =  0
+        RUSAGE_SELF = 0
+        RLIMIT_NOFILE = 0
+
+        @staticmethod
+        def getrusage(who):
+            return type("Usage", (), {"ru_maxrss": 0})()
+
+        @staticmethod
+        def setrlimit(resource, limits):
+            pass
+        
+        @staticmethod
+        def getrlimit(resource):
+            return (4096, 4096)
+            
 import sys
 import time
 import torch
@@ -19,7 +39,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit.Chem import rdMolDescriptors as rdMD
 from torch import nn
-from torch.utils.tensorboard import SummaryWriter
+from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
 from rassp import dataset

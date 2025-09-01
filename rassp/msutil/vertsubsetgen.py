@@ -470,12 +470,12 @@ class BreakAndRearrangeFast:
                 heavy_atom_inds_with_hs.append(i)
 
         # generate all valid permutations of hydrogen donations
-        valid_h_donations = np.array(list(itertools.product(heavy_atom_inds_with_hs, heavy_atom_inds)))
+        valid_h_donations = np.array(list(itertools.product(heavy_atom_inds_with_hs, heavy_atom_inds)), dtype=np.int64)
         if len(valid_h_donations) == 0:
             # array needs to have 2-dims and we explicitly do_rearrange
             # later, so this needs to be a rearrange no-op
             # we check for -1, -1 in `do_rearrangements_lut_bits`
-            valid_h_donations = np.array([[-1, -1]])
+            valid_h_donations = np.array([[-1, -1]], dtype=np.int64)
 
         subsets = [np.array([fast.bitset_create(range(n_total_atoms))], dtype=np.int64)]
         

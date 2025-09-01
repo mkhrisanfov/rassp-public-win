@@ -3,7 +3,12 @@ from Cython.Build import cythonize
 import numpy as np
 
 
-COMPILE_ARGS = ['-O3', '-std=c++17', '-march=native', '-ffast-math']
+COMPILE_ARGS = [
+                #'-O3', 
+                '-std=c++17', 
+                '-march=native', 
+                #'-ffast-math'
+                ]
 
 
 extensions = [
