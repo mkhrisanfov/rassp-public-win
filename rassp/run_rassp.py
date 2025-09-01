@@ -1,6 +1,52 @@
 """
-Predictor class + script for running EI-MS pred on input files, inputs can 
-be smiles files, sdf files, or pickled rdmol objects from RDKit. 
+Predictor class + script for running EI-MS pred on input files, inputs can
+be smiles files, sdf files, or pickled rdmol objects from RDKit.
+
+This code implements a predictor for EI-MS (Electron Ionization Mass Spectrometry) 
+spectra prediction using deep learning models. 
+Here's a breakdown of its main components:
+
+1. **Model Definitions**: 
+   - Two models are defined: "FormulaNet" and "SubsetNet"
+   - Each model has associated checkpoint and metadata files for loading trained models
+   - Model-specific constraints for maximum atoms, formulae, and subset samples
+
+2. **Predictor Class**:
+   - Handles the core prediction logic
+   - Includes validation of molecules based on constraints
+   - Loads models and performs inference using the netutil module
+   - Processes results and formats them for output
+
+3. **Validation Logic**:
+   - Checks if molecules are valid based on:
+     * Atom types (only allowed elements)
+     * Atom count limits
+     * Formula count limits
+     * Single molecule constraint (no fragments)
+     * Formula limits per element type
+
+4. **File Handling**:
+   - Supports multiple input formats: SMILES, InChI, SDF, and pickled RDKit molecules
+   - Supports multiple output formats: text (formatted spectra) and JSON
+   - Processes batches of molecules for efficient inference
+
+5. **Command Line Interface**:
+   - Uses Click for command-line argument parsing
+   - Accepts input/output filenames, file types, model selection, GPU usage, batch size, 
+     and data workers
+   - Provides comprehensive usage examples in the docstring
+
+The workflow involves loading molecules from input files, validating them, running predictions
+using the specified model, and writing results to output files in the requested format.
+The code handles both GPU and CPU inference and includes comprehensive logging and error handling.
+
+Key features include:
+- Flexible input/output format support
+- Model validation and constraint checking
+- Batch processing for efficiency
+- GPU acceleration support
+- Detailed metadata tracking
+- Comprehensive error handling and logging
 
 Setup (internal):
 ```
@@ -36,36 +82,34 @@ CUDA_VISIBLE_DEVICES='' rassp \
 ```
 """
 
-from typing import List, Union, Tuple, Dict
-
+# import gzip
+# import io
+import json
 import logging
+import os
+import pickle
+# import sys
+import time
+# import warnings
+# from datetime import datetime
+from pathlib import Path
+from typing import Dict, List, Tuple, Union
+
+import click
+import numpy as np
+# import pandas as pd
+import torch
+from rdkit import Chem
+# from tqdm import tqdm
+
+from rassp import netutil
+from rassp.util import num_unique_frag_formulae
 
 # logging.basicConfig(
 #     level=logging.DEBUG,
 #     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 # )
 logger = logging.getLogger(__name__)
-
-import gzip
-import io
-import json
-import numpy as np
-import pandas as pd
-import pickle
-import sys
-import time
-import torch
-import warnings
-import os
-import click
-from pathlib import Path
-
-from datetime import datetime
-from rdkit import Chem
-from tqdm import tqdm
-
-from rassp import netutil
-from rassp.util import num_unique_frag_formulae
 
 model_dir = os.path.join(str(Path(__file__).resolve().parent), "models")
 
