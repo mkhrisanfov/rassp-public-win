@@ -1,48 +1,89 @@
 """
 Pipeline for generating predictions for simpleforward models
+
+## Overview
+This is a Ruffus pipeline that generates spectral predictions for molecules using trained models.
+It reads molecular data from parquet files, runs inference, and stores results in SQLite databases.
+The pipeline is designed to be resumable - if interrupted, it will skip already processed molecules.
+
+## Key Components
+
+### Main Pipeline Function (`run_exp`)
+1. **Setup**: Creates SQLite database and table structure for storing predictions
+2. **Data Loading**: Reads molecular data from parquet files and processes RDKit molecules
+3. **Duplicate Removal**: Ensures unique molecule IDs
+4. **Existing Data Filtering**: Skips molecules already in the database
+5. **Phase Filtering**: Filters data by training/test phases
+6. **Model Loading**: Loads trained model weights and metadata
+7. **Batch Processing**: Runs inference in batches and stores results
+
+### Key Features
+- **SQLite Storage**: Predictions are stored in SQLite databases for efficient access
+- **Progress Tracking**: Uses tqdm for progress bars during batch processing
+- **Memory Management**: Configurable batch sizes and data loading parameters
+- **Phase-aware Processing**: Respects train/test phase assignments from CV splitter
+- **Error Handling**: Checks for existing data and handles type mismatches
+
+### Configuration
+- Uses experiment configurations from `FORWARD_EVAL_EXPERIMENTS` constant
+- Supports different CV methods for data splitting
+- Configurable batch sizes and CUDA usage
+- Supports data parallel processing
+
+### Workflow
+1. Read molecular data from parquet
+2. Filter and prepare data
+3. Load trained model
+4. Process in batches
+5. Store predictions in SQLite
+6. Mark job as complete with done file
+
+### Bugs
+1. If all the predictions are done, the wokflow does not error or run again.
+  Delete files in `forward.preds` dir and retry again.
 """
 
+import logging
+import os
+
+import netutil
 import numpy as np
 import pandas as pd
-import seaborn as sns
-import torch
-import time
-import pickle
-import os
-from tqdm import tqdm
-from glob import glob
-import copy
-from ruffus import *
-import zlib
 from rdkit import Chem
+from ruffus import files, mkdir, pipeline_run
+from sqlalchemy import (
+    Column,
+    Integer,
+    LargeBinary,
+    MetaData,
+    String,
+    Table,
+    create_engine,
+)
+from tqdm import tqdm
+from util import spect_list_to_string
 
-import logging
+from const import FORWARD_EVAL_EXPERIMENTS as EXPERIMENTS
+
+PRED_DIR = "forward.preds"
+CV_METHOD_DEFAULT = {"how": "morgan_fingerprint_mod", "mod": 10, "test": [0, 1]}
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
-from sqlalchemy import create_engine, MetaData, Table
-from sqlalchemy import sql
-from sqlalchemy import Integer, String, Column, LargeBinary
 
-import netutil
-from const import FORWARD_EVAL_EXPERIMENTS as EXPERIMENTS
-from util import spect_list_to_string
-
-PRED_DIR = "forward.preds"
-
-td = lambda x: os.path.join(PRED_DIR, x)
-
-CV_METHOD_DEFAULT = {"how": "morgan_fingerprint_mod", "mod": 10, "test": [0, 1]}
+# td = lambda x: os.path.join(PRED_DIR, x)
+def td(x):
+    return os.path.join(PRED_DIR, x)
 
 
 def params():
     for exp_name, ec in EXPERIMENTS.items():
-        assert ec.get("streaming_save", False), (
-            "we only support inference with streaming save to sqlite now"
-        )
+        assert ec.get(
+            "streaming_save", False
+        ), "we only support inference with streaming save to sqlite now"
 
         outfiles = [
             os.path.join(PRED_DIR, f"{exp_name}.spect.sqlite"),
@@ -89,9 +130,9 @@ def run_exp(infile, outfiles, ec, exp_name):
         df = df.sample(ec["max_data_n"], random_state=0)
     df["rdmol"] = df.rdmol.apply(Chem.Mol)
 
-    assert np.all(df["mol_id"].map(lambda x: isinstance(x, mol_id_ptype))), (
-        f"mol_ids must be {mol_id_ptype}"
-    )
+    assert np.all(
+        df["mol_id"].map(lambda x: isinstance(x, mol_id_ptype))
+    ), f"mol_ids must be {mol_id_ptype}"
 
     # make sure mol_ids are unique
     unique_df = df.drop_duplicates(subset=["mol_id"])
@@ -147,8 +188,8 @@ def run_exp(infile, outfiles, ec, exp_name):
             normalize_pred=ec.get("normalize_pred", False),
             output_hist_bins=True,
             dataloader_config={
-                "pin_memory": False,
-                "num_workers": 32,
+                "pin_memory": True,
+                "num_workers": 4,
                 "persistent_workers": True,
             },
         )
