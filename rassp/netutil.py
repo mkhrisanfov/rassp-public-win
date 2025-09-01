@@ -539,7 +539,7 @@ class PredModel(object):
         self.USE_CUDA = USE_CUDA
 
         if self.USE_CUDA:
-            net = torch.load(checkpoint_filename)
+            net = torch.load(checkpoint_filename, map_location=torch.device("cuda"))
         else:
             logger.warning(f"NOT USING GPU!")
             net = torch.load(
